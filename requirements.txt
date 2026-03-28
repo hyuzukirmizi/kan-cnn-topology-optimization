@@ -1,0 +1,12 @@
+torch
+autograd
+numpy
+scipy
+pandas
+xarray
+bottleneck
+matplotlib
+seaborn
+nlopt
+scikit-image
+jupyter
