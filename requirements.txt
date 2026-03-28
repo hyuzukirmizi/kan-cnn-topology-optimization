@@ -11,3 +11,4 @@ nlopt
 scikit-image
 jupyter
 scikit-learn
+tqdm
