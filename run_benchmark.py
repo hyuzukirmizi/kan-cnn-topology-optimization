@@ -30,6 +30,20 @@ def run_model(model_fn, name, max_steps):
     print(f"[{name}] Finished in {duration:.2f}s | Best Loss: {best_loss:.4f}")
     return ds, {"model": name, "time_sec": duration, "best_loss": best_loss, "best_step": best_step}
 
+def run_adaptive_kan(model_fn, name, max_steps):
+    print(f"[{name}] Starting Adaptive Refinement...")
+    start_time = time.time()
+    
+    # Schedule: 1st half of steps at grid=10, 2nd half refines to grid=30
+    schedule = [(max_steps // 2, 10), (max_steps - (max_steps // 2), 30)]
+    ds = pt.train_lbfgs_adaptive_kan(model_fn(), schedule)
+    duration = time.time() - start_time
+    
+    best_loss = float(np.nanmin(ds.loss.values))
+    best_step = int(np.nanargmin(ds.loss.values))
+    print(f"[{name}] Finished in {duration:.2f}s | Best Loss: {best_loss:.4f}")
+    return ds, {"model": name, "time_sec": duration, "best_loss": best_loss, "best_step": best_step}
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--problem", type=str, required=True)
@@ -56,8 +70,8 @@ def main():
     ds, metrics = run_model(lambda: pt.KANModel(args=topo_args, resizes=resizes), "hybrid_kan", args.max_steps)
     results.append(metrics); datasets.append(ds); labels.append("hybrid_kan")
 
-    # 4. Baseline KAN (with increased grid size for sharpness)
-    ds, metrics = run_model(lambda: pt.CoordKANModel(args=topo_args, grid=100), "baseline_kan", args.max_steps)
+    # 4. Baseline KAN (Adaptive Refinement starting from a coarse grid)
+    ds, metrics = run_adaptive_kan(lambda: pt.CoordKANModel(args=topo_args, grid=10), "baseline_kan", args.max_steps)
     results.append(metrics); datasets.append(ds); labels.append("baseline_kan")
 
     # Save benchmark stats to JSON
