@@ -292,7 +292,7 @@ class KANModel(Model):
         args=None,
         latent_size=128,       # same default as CNNModel for a fair comparison
         hidden_size=64,        # intermediate width of the KAN gate network
-        num_kan_layers=2,      # depth of KAN gate: 1 → [z→dc], 2 → [z→hidden→dc]
+        num_kan_layers=1,      # depth of KAN gate: 1 → [z→dc], 2 → [z→hidden→dc]
         grid=5,
         k=3,
         latent_scale=1.0,

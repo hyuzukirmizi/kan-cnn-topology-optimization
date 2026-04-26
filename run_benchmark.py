@@ -9,14 +9,14 @@ from pathlib import Path
 from neural_structural_optimization import problems, topo_api
 import models as pt
 
-def get_resizes(width, height):
+def get_model_kwargs(width, height):
     """Automatically determine safe CNN/KAN upscaling based on grid dimensions."""
     if width % 16 == 0 and height % 16 == 0:
-        return (1, 2, 2, 2, 2, 1)
+        return {"resizes": (1, 2, 2, 2, 2, 1), "conv_filters": (128, 64, 32, 16, 8, 1)}
     elif width % 8 == 0 and height % 8 == 0:
-        return (1, 2, 2, 2, 1)
+        return {"resizes": (1, 2, 2, 2, 1), "conv_filters": (128, 64, 32, 16, 1)}
     else:
-        return (1, 1, 2, 2, 1)
+        return {"resizes": (1, 1, 2, 2, 1), "conv_filters": (128, 64, 32, 16, 1)}
 
 def run_model(model_fn, name, max_steps):
     print(f"[{name}] Starting...")
@@ -49,10 +49,13 @@ def main():
     parser.add_argument("--problem", type=str, required=True)
     parser.add_argument("--max_steps", type=int, default=100)
     args = parser.parse_args()
+    
+    # Strip any hidden Windows carriage returns (\r) or whitespace
+    args.problem = args.problem.strip()
 
     prob = problems.PROBLEMS_BY_NAME[args.problem]
     topo_args = topo_api.specified_task(prob)
-    resizes = get_resizes(prob.width, prob.height)
+    model_kwargs = get_model_kwargs(prob.width, prob.height)
 
     results = []
     datasets = []
@@ -63,11 +66,11 @@ def main():
     results.append(metrics); datasets.append(ds); labels.append("pixel")
 
     # 2. CNN L-BFGS
-    ds, metrics = run_model(lambda: pt.CNNModel(args=topo_args, resizes=resizes), "cnn", args.max_steps)
+    ds, metrics = run_model(lambda: pt.CNNModel(args=topo_args, **model_kwargs), "cnn", args.max_steps)
     results.append(metrics); datasets.append(ds); labels.append("cnn")
 
     # 3. Hybrid KAN
-    ds, metrics = run_model(lambda: pt.KANModel(args=topo_args, resizes=resizes), "hybrid_kan", args.max_steps)
+    ds, metrics = run_model(lambda: pt.KANModel(args=topo_args, **model_kwargs), "hybrid_kan", args.max_steps)
     results.append(metrics); datasets.append(ds); labels.append("hybrid_kan")
 
     # 4. Baseline KAN (Adaptive Refinement starting from a coarse grid)
@@ -84,6 +87,16 @@ def main():
     # Save physical designs to NetCDF
     dims = pd.Index(labels, name='model')
     xr.concat(datasets, dim=dims).to_netcdf(out_dir / f"{args.problem}_designs.nc")
+
+    # Print summary table
+    print("\n" + "="*50)
+    print(f"BENCHMARK SUMMARY: {args.problem}")
+    print("="*50)
+    print(f"{'Model':<15} | {'Best Loss':<12} | {'Step':<8} | {'Time (s)':<10}")
+    print("-" * 50)
+    for r in results:
+        print(f"{r['model']:<15} | {r['best_loss']:<12.4f} | {r['best_step']:<8} | {r['time_sec']:<10.2f}")
+    print("="*50)
 
 if __name__ == "__main__":
     import pandas as pd # Needed for Index
