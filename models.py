@@ -393,9 +393,9 @@ class KANModel(Model):
         net = net.view(1, self.dense_channels, self.h0, self.w0)
 
         # ── KAN channel gates (non-linear channel attention) ──────────────────
-        # sigmoid maps KAN output to (0, 1); applied channel-wise so each
-        # spatial channel is independently gated based on the latent z.
-        gates = torch.sigmoid(self.kan(self.z))                  # (1, dc)
+        # Apply an open-door bias (+3.0) and lower bound (0.05 + 0.95*sigmoid)
+        # to prevent dead channels and let L-BFGS track smoothly from the start.
+        gates = 0.05 + 0.95 * torch.sigmoid(self.kan(self.z) + 3.0)      # (1, dc)
         net = net * gates.view(1, self.dense_channels, 1, 1)     # (1, dc, h0, w0)
 
         for resize, conv, off in zip(self.resizes, self.convs, self.offsets):
