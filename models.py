@@ -46,24 +46,20 @@ import xarray
 from neural_structural_optimization import topo_api, topo_physics
 from kan import KAN
 
-
-# ===========================================================================
-# Autograd  <->  PyTorch bridge
-# ===========================================================================
-
 class _TopoLossFunction(torch.autograd.Function):
     """Custom Function that evaluates topology compliance loss via
     autograd-numpy physics and exposes correct gradients to PyTorch."""
 
     @staticmethod
-    def forward(ctx, logits, env):
+    def forward(ctx, logits, env, volume_constraint=True):
         # logits: float64 tensor of shape (1, nely, nelx)
         x_np = logits.detach().cpu().numpy().astype(np.float64)
+        ctx.volume_constraint = volume_constraint
 
         def f(x):
             # x: (1, nely, nelx) -> losses: (1,)
             return anp.stack([
-                env.objective(x[i], volume_contraint=True)
+                env.objective(x[i], volume_contraint=ctx.volume_constraint)
                 for i in range(x.shape[0])
             ])
 
@@ -81,7 +77,7 @@ class _TopoLossFunction(torch.autograd.Function):
              * grad_output.item())
         grad_np = ctx.vjp_fn(v)          # shape (1, nely, nelx)
         grad = torch.tensor(grad_np, dtype=torch.float64)
-        return grad, None
+        return grad, None, None
 
 
 # ===========================================================================
@@ -99,8 +95,12 @@ class Model(nn.Module):
         self.env = topo_api.Environment(args)
 
     def loss(self, logits):
-        """Compliance loss (float scalar). Internally uses float64 physics."""
-        return _TopoLossFunction.apply(logits.double(), self.env)
+        """Compliance loss (float scalar) with hard volume balancing via autograd numpy."""
+        return _TopoLossFunction.apply(logits.double(), self.env, True)
+
+    def unconstrained_loss(self, logits):
+        """Compliance loss (float scalar) without volume balancing projection."""
+        return _TopoLossFunction.apply(logits.double(), self.env, False)
 
     def forward(self):
         raise NotImplementedError
@@ -415,6 +415,72 @@ class KANModel(Model):
 # CoordKANModel  — coordinate-based KAN (physics-motivated)
 # ===========================================================================
 
+class EfficientKANLinear(nn.Module):
+    """One KAN layer: in_features → out_features, each edge is a learnable B-spline."""
+    def __init__(self, in_features, out_features,
+                 grid_size=5, spline_order=3,
+                 grid_range=(-1, 1),
+                 base_activation=nn.SiLU):
+        super().__init__()
+        self.in_features  = in_features
+        self.out_features = out_features
+        self.grid_size    = grid_size
+        self.spline_order = spline_order
+
+        # --- B-spline knot vector (uniform, extended) ---
+        h = (grid_range[1] - grid_range[0]) / grid_size
+        grid = torch.arange(-spline_order, grid_size + spline_order + 1,
+                            dtype=torch.float32) * h + grid_range[0]
+        self.register_buffer('grid', grid.unsqueeze(0))
+
+        n_bases = grid_size + spline_order
+        self.spline_weight = nn.Parameter(
+            torch.randn(out_features, in_features, n_bases) * 0.1)
+
+        self.base_weight = nn.Parameter(
+            torch.randn(out_features, in_features) * (1.0 / np.sqrt(in_features)))
+        self.base_activation = base_activation()
+
+    def b_splines(self, x):
+        x = x.unsqueeze(-1)
+        grid = self.grid
+        bases = ((x >= grid[:, :-1]) & (x < grid[:, 1:])).float()
+
+        for k in range(1, self.spline_order + 1):
+            left_num  = x - grid[:, :-(k + 1)]
+            left_den  = grid[:, k:-1] - grid[:, :-(k + 1)]
+            right_num = grid[:, k + 1:] - x
+            right_den = grid[:, k + 1:] - grid[:, 1:-k]
+
+            left  = left_num  / left_den.clamp(min=1e-7)  * bases[:, :, :-1]
+            right = right_num / right_den.clamp(min=1e-7) * bases[:, :, 1:]
+            bases = left + right
+        return bases
+
+    def forward(self, x):
+        spline_out = torch.einsum(
+            'bin,oin->bo',
+            self.b_splines(x),
+            self.spline_weight
+        )
+        base_out = F.linear(self.base_activation(x), self.base_weight)
+        return base_out + spline_out
+
+
+class EfficientKAN(nn.Module):
+    """Stack of KAN layers."""
+    def __init__(self, layer_dims, **kwargs):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            EfficientKANLinear(layer_dims[i], layer_dims[i+1], **kwargs)
+            for i in range(len(layer_dims) - 1)
+        ])
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
 class CoordKANModel(Model):
     """Coordinate-based KAN: maps (x, y) → density ρ(x, y).
 
@@ -466,8 +532,8 @@ class CoordKANModel(Model):
         self,
         seed=0,
         args=None,
-        kan_layers=(32, 32),
-        grid=10,
+        kan_layers=(16, 16),
+        grid=8,
         k=3,
     ):
         super().__init__(seed, args)
@@ -477,45 +543,31 @@ class CoordKANModel(Model):
         self.nelx = nelx
         self.volfrac = float(args.get("volfrac", 0.5))
 
-        # KAN: 2 coords → hidden layers → 1 density logit.
-        # grid_range=[0,1] places spline knots over the actual coordinate domain
-        # so all grid intervals are useful (vs default [-1,1] which wastes half).
         width = [2] + list(kan_layers) + [1]
-        self.kan = KAN(
-            width=width,
-            grid=grid,
-            k=k,
-            seed=seed,
-            auto_save=False,
-            save_act=False,
-            symbolic_enabled=False,
-            grid_range=[0, 1],
-            device="cpu",
+        self.kan = EfficientKAN(
+            width,
+            grid_size=grid,
+            spline_order=k,
+            grid_range=(-1.0, 1.0)
         )
 
-        # Normalised (x, y) coordinate grid for all H·W elements.
-        xs = torch.linspace(0.0, 1.0, nelx)
-        ys = torch.linspace(0.0, 1.0, nely)
-        yy, xx = torch.meshgrid(ys, xs, indexing="ij")   # (H, W) each
-        coords = torch.stack([xx.flatten(), yy.flatten()], dim=1)  # (H·W, 2)
-        self.register_buffer("coords", coords.float())
+        cx = (np.arange(nelx) + 0.5) / nelx * 2 - 1
+        cy = (np.arange(nely) + 0.5) / nely * 2 - 1
+        CX, CY = np.meshgrid(cx, cy, indexing='xy')
+        coords = torch.tensor(
+            np.stack([CX.ravel(), CY.ravel()], axis=1),
+            dtype=torch.float32)
 
-        # Calibrate spline grids to the actual coordinate distribution before
-        # any gradient steps.  Requires a forward pass with save_act=True to
-        # populate self.kan.acts, then update_grid_from_samples re-places knots.
-        self.kan.save_act = True
-        with torch.no_grad():
-            self.kan(self.coords)
-        self.kan.update_grid_from_samples(self.coords)
-        self.kan.save_act = False
-
-        # Scalar bias initialised so sigmoid(bias) ≈ target volume fraction.
+        self.register_buffer("coords", coords)
+        
+        # No initial bias needed when training with soft penalty as test.py does,
+        # but to keep it compatible with existing code expecting sigmoid output:
         init_logit = float(np.log(self.volfrac / (1.0 - self.volfrac + 1e-8)))
-        self.density_bias = nn.Parameter(torch.tensor([init_logit]))
+        self.density_bias = nn.Parameter(torch.tensor([init_logit], dtype=torch.float32))
 
     def forward(self):
         logits = self.kan(self.coords) + self.density_bias  # (H·W, 1)
-        return torch.sigmoid(logits).view(1, self.nely, self.nelx)
+        return logits.view(1, self.nely, self.nelx).double()
 
     def warmstart(self, density_2d, n_steps=400, lr=0.02):
         """Pre-fit the KAN to a reference density field via Adam MSE minimisation.
@@ -632,6 +684,19 @@ def _set_params_flat(model, x):
         offset += n
 
 
+def _prepare_kan_plot(model):
+    """Helper to populate KAN's activation caches for plotting after training."""
+    if hasattr(model, "kan") and hasattr(model.kan, "save_act"):
+        model.kan.save_act = True
+        with torch.no_grad():
+            if hasattr(model, "z"):
+                # Perturb z to show a distribution of activations in the KAN plot
+                z_sample = model.z + torch.randn(256, model.z.shape[1], device=model.z.device) * 0.1
+                model.kan(z_sample)
+            elif hasattr(model, "coords"):
+                model.kan(model.coords)
+        model.kan.save_act = False
+
 # ---------------------------------------------------------------------------
 # L-BFGS via scipy  (mirrors train.train_lbfgs)
 # ---------------------------------------------------------------------------
@@ -670,6 +735,8 @@ def train_lbfgs(model, max_iterations, save_intermediate_designs=True, **kwargs)
         **kwargs,
     )
 
+    _prepare_kan_plot(model)
+
     # render each frame with volume constraint applied
     designs = [
         model.env.render(f.reshape(-1), volume_contraint=True)
@@ -679,6 +746,59 @@ def train_lbfgs(model, max_iterations, save_intermediate_designs=True, **kwargs)
         np.array(losses), np.array(designs), save_intermediate_designs
     )
 
+
+# ---------------------------------------------------------------------------
+# Adam Optimizer (mirrors test.py)
+# ---------------------------------------------------------------------------
+
+def train_adam(model, max_iterations, lr=5e-3, save_intermediate_designs=True):
+    """Train using Adam and a soft volume penalty.
+    
+    This avoids L-BFGS and hard volume projection (which destroys gradients
+    for fully clamped elements), mimicking the robust topology discovery
+    from test.py.
+    """
+    losses = []
+    frames = []
+    
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    volfrac = model.env.args["volfrac"]
+    
+    for it in range(max_iterations):
+        optimizer.zero_grad()
+        
+        logits = model()
+        
+        # Apply sigmoid to bound density between 0 and 1. 
+        # unconstrained_loss bypasses the physics engine's internal sigmoid!
+        rho = torch.sigmoid(logits)
+        
+        # Evaluate raw compliance on valid densities
+        loss_val = model.unconstrained_loss(rho) 
+
+        # Soft volume penalty
+        rho_clamped = rho.clamp(1e-3, 1.0)
+        vol = rho_clamped.mean()
+        vol_penalty = 1000.0 * ((vol / volfrac) - 1.0).pow(2)
+        
+        total_loss = loss_val + vol_penalty
+        total_loss.backward()
+        optimizer.step()
+        
+        frame_np = rho.detach().cpu().numpy().copy()
+        frames.append(frame_np)
+        losses.append(float(loss_val.item()))
+        
+    _prepare_kan_plot(model)
+
+    # Render without hard volume constraint to see what Adam actually built
+    designs = [
+        model.env.render(f.reshape(-1), volume_contraint=False)
+        for f in frames
+    ]
+    return _optimizer_result_dataset(
+        np.array(losses), np.array(designs), save_intermediate_designs
+    )
 
 # ---------------------------------------------------------------------------
 # Adaptive KAN training  (grid progressive refinement — KAN-unique)
