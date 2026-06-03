@@ -1,4 +1,4 @@
-# KAN vs CNN Topology Optimization Models Comparison
+# Deep Learning Architectures Topology Optimization Models Comparison
 
 This repository provides a standalone comparison of the topological structural optimization using various models including **MMA** (Method of Moving Asymptotes), **OC** (Optimality Criteria), **Pixel-based** density modeling, **CNN** (Convolutional Neural Networks), and **KAN** (Kolmogorov-Arnold Networks). 
 
