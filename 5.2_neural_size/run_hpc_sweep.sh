@@ -14,11 +14,7 @@ set -euo pipefail
 # --- Environment Setup ---
 # Get the root directory of the repository
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -n "$SLURM_SUBMIT_DIR" ]; then
-    REPO_ROOT="$SLURM_SUBMIT_DIR"
-else
-    REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
-fi
+REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
 export REPO_ROOT
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
