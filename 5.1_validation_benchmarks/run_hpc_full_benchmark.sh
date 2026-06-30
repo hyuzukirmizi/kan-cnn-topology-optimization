@@ -50,7 +50,7 @@ conda activate "$ENV_NAME"
 
 echo "Installing Python packages from requirements.txt"
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r "$REPO_ROOT/requirements.txt"
 
 python <<'PY'
 import importlib.util

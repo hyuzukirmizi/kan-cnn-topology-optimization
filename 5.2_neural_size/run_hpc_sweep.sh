@@ -14,7 +14,11 @@ set -euo pipefail
 # --- Environment Setup ---
 # Get the root directory of the repository
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
+if [ -n "$SLURM_SUBMIT_DIR" ]; then
+    REPO_ROOT="$SLURM_SUBMIT_DIR"
+else
+    REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
+fi
 export REPO_ROOT
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
@@ -24,6 +28,11 @@ if [[ ! -w "$WORK_ROOT" ]]; then
     # If the default work root isn't writable, fall back to a directory in $HOME
     WORK_ROOT="$HOME/kan_topo_sweep"
 fi
+
+# Unity HPC recommendation: Set conda cache and env directories to the /work partition
+export CONDA_PKGS_DIRS="${WORK_ROOT}/.conda/pkgs"
+export CONDA_ENVS_PATH="${WORK_ROOT}/.conda/envs"
+mkdir -p "$CONDA_PKGS_DIRS" "$CONDA_ENVS_PATH"
 
 # Create directories for logs and results within the working directory
 mkdir -p "$WORK_ROOT/logs"

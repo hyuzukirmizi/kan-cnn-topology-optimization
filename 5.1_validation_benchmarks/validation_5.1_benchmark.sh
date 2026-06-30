@@ -12,7 +12,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
+if [ -n "$SLURM_SUBMIT_DIR" ]; then
+    REPO_ROOT="$SLURM_SUBMIT_DIR"
+else
+    REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
+fi
 export REPO_ROOT
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 WORK_ROOT="${SLURM_SUBMIT_DIR:-$ROOT_DIR}"
@@ -22,8 +26,8 @@ fi
 
 # Unity HPC recommendation: Set conda cache and env directories to the /work partition
 export CONDA_PKGS_DIRS="${WORK_ROOT}/.conda/pkgs"
-export CONDA_ENVS_DIRS="${WORK_ROOT}/.conda/envs"
-mkdir -p "$CONDA_PKGS_DIRS" "$CONDA_ENVS_DIRS"
+export CONDA_ENVS_PATH="${WORK_ROOT}/.conda/envs"
+mkdir -p "$CONDA_PKGS_DIRS" "$CONDA_ENVS_PATH"
 
 mkdir -p "$WORK_ROOT/logs" "$WORK_ROOT/benchmark_results" "$WORK_ROOT/benchmark_plots"
 cd "$WORK_ROOT"
@@ -55,7 +59,7 @@ conda activate "$ENV_NAME"
 
 echo "Installing Python packages from requirements.txt"
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r "$REPO_ROOT/requirements.txt"
 
 python <<'PY'
 import importlib.util
