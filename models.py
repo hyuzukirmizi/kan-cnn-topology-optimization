@@ -253,10 +253,10 @@ class CNNModel(Model):
 
 
 # ===========================================================================
-# KANModel
+# HybridKANModel
 # ===========================================================================
 
-class KANModel(Model):
+class HybridKANModel(Model):
     """KAN reparameterisation of the design field with learned channel gating.
 
     Architecture
@@ -412,7 +412,7 @@ class KANModel(Model):
 
 
 # ===========================================================================
-# CoordKANModel  — coordinate-based KAN (physics-motivated)
+# BaseKANModel  — coordinate-based KAN (physics-motivated)
 # ===========================================================================
 
 class EfficientKANLinear(nn.Module):
@@ -481,7 +481,7 @@ class EfficientKAN(nn.Module):
             x = layer(x)
         return x
 
-class CoordKANModel(Model):
+class BaseKANModel(Model):
     """Coordinate-based KAN: maps (x, y) → density ρ(x, y).
 
     Physics motivation
@@ -815,7 +815,7 @@ def train_lbfgs_adaptive_kan(model, grid_schedule, save_intermediate_designs=Tru
 
     Parameters
     ----------
-    model : CoordKANModel or KANModel
+    model : BaseKANModel or HybridKANModel
         Must have a ``model.refine(new_grid)`` method (CoordKANModel) or a
         ``model.kan`` attribute that exposes ``KAN.refine()``.
     grid_schedule : list of ``(iterations, grid_size)`` pairs
@@ -851,7 +851,7 @@ def train_lbfgs_adaptive_kan(model, grid_schedule, save_intermediate_designs=Tru
             else:
                 raise AttributeError(
                     "model does not expose a .refine() method. "
-                    "Use CoordKANModel or KANModel."
+                    "Use BaseKANModel or HybridKANModel."
                 )
 
         ds_phase = train_lbfgs(model, iters, save_intermediate_designs=True)

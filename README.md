@@ -5,7 +5,7 @@ This repository provides a standalone comparison of the topological structural o
 The underlying optimization problem is solved completely utilizing a PyTorch parameterization and optimization framework without relying on TensorFlow. 
 
 ## Structure
-- `models.py`: All optimized network architectures (`CNNModel`, `KANModel` (Hybrid), `CoordKANModel` (Baseline KAN), `PixelModel`) natively written in PyTorch. Includes wrappers for PyTorch optimization (LBFGS, MMA, OC).
+- `models.py`: All optimized network architectures (`CNNModel`, `HybridKANModel` (Hybrid), `BaseKANModel` (Baseline KAN), `PixelModel`) natively written in PyTorch. Includes wrappers for PyTorch optimization (LBFGS, MMA, OC).
 - `optimization-examples.ipynb`: A standalone notebook defining structural topology cases and benchmarks running MMA, OC, Pixel, CNN, Hybrid KAN, and Baseline KAN optimizations. Compiles training iteration stats, logs visual comparisons, and generates precise numerical compliance benchmark tables side-by-side.
 - `neural_structural_optimization/`: The backend Finite Element Methods (FEM) optimization simulation package utilizing `autograd`.
 - `kan/`: Specialized modular package running actual network implementations for KANs via b-spline parameters.

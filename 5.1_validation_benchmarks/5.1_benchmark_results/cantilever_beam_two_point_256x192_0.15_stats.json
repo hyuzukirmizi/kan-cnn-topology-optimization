@@ -1,0 +1,53 @@
+{
+  "problem": "cantilever_beam_two_point_256x192_0.15",
+  "results": [
+    {
+      "model": "Hybrid KAN",
+      "time_sec": 1898.5451982021332,
+      "best_loss": 218.2576787050475,
+      "best_step": 400,
+      "final_loss": 218.2576787050475,
+      "final_gray_fraction": 0.07078043619791667
+    },
+    {
+      "model": "KAN",
+      "time_sec": 5365.716094970703,
+      "best_loss": 206.14850106155876,
+      "best_step": 400,
+      "final_loss": 206.14850106155876,
+      "final_gray_fraction": 0.08052571614583333
+    },
+    {
+      "model": "CNN-LBFGS",
+      "time_sec": 1938.9231443405151,
+      "best_loss": 218.64424290590273,
+      "best_step": 400,
+      "final_loss": 218.64424290590273,
+      "final_gray_fraction": 0.08856201171875
+    },
+    {
+      "model": "Pixel-LBFGS",
+      "time_sec": 738.3811528682709,
+      "best_loss": 284.6147569792915,
+      "best_step": 142,
+      "final_loss": 284.6147569797516,
+      "final_gray_fraction": 0.12357584635416667
+    },
+    {
+      "model": "MMA",
+      "time_sec": 1653.4284081459045,
+      "best_loss": 233.1829979582617,
+      "best_step": 400,
+      "final_loss": 233.1829979582617,
+      "final_gray_fraction": 0.11604817708333333
+    },
+    {
+      "model": "OC",
+      "time_sec": 1654.69815158844,
+      "best_loss": 237.36763014343583,
+      "best_step": 400,
+      "final_loss": 237.36763014343583,
+      "final_gray_fraction": 0.11295572916666667
+    }
+  ]
+}

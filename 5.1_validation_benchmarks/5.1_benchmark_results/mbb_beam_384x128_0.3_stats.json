@@ -1,0 +1,31 @@
+{
+  "problem": "mbb_beam_384x128_0.3",
+  "width": 384,
+  "height": 128,
+  "metrics": [
+    {
+      "model": "pixel",
+      "time_sec": 3.0268678665161133,
+      "best_loss": 4319.953568343553,
+      "best_step": 3
+    },
+    {
+      "model": "cnn",
+      "time_sec": 3.1471140384674072,
+      "best_loss": 6012.01195173493,
+      "best_step": 3
+    },
+    {
+      "model": "hybrid_kan",
+      "time_sec": 3.11226224899292,
+      "best_loss": 4652.9503445420705,
+      "best_step": 3
+    },
+    {
+      "model": "baseline_kan",
+      "time_sec": 3.387148857116699,
+      "best_loss": 2573.7245768843486,
+      "best_step": 2
+    }
+  ]
+}

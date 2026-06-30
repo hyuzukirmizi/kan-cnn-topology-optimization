@@ -6,6 +6,10 @@ import numpy as np
 import xarray as xr
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from neural_structural_optimization import problems, topo_api
 import models as pt
 
@@ -56,6 +60,21 @@ def run_adaptive_kan(model_fn, name, max_steps):
     print(f"[{name}] Finished in {duration:.2f}s | Best Loss: {best_loss:.4f}")
     return ds, {"model": name, "time_sec": duration, "best_loss": best_loss, "best_step": best_step}
 
+def save_markdown_summary(problem_name, results, out_dir):
+    """Saves a simple markdown summary of the benchmark results."""
+    md_path = out_dir / f"{problem_name}_summary.md"
+    with open(md_path, "w") as f:
+        f.write(f"# Benchmark Summary: {problem_name}\n\n")
+        f.write("| Model          | Best Loss    | Step | Time (s)   |\n")
+        f.write("|----------------|--------------|------|------------|\n")
+        for r in results:
+            f.write(
+                f"| {r['model']:<14} | {r['best_loss']:<12.4f} | {r['best_step']:<4} | {r['time_sec']:<10.2f} |\n"
+            )
+        f.write("\n")
+    print(f"Markdown summary saved to {md_path}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--problem", type=str, required=True)
@@ -82,11 +101,11 @@ def main():
     results.append(metrics); datasets.append(ds); labels.append("cnn")
 
     # 3. Hybrid KAN
-    ds, metrics = run_model(lambda: pt.KANModel(args=topo_args, **model_kwargs), "hybrid_kan", args.max_steps)
+    ds, metrics = run_model(lambda: pt.HybridKANModel(args=topo_args, **model_kwargs), "hybrid_kan", args.max_steps)
     results.append(metrics); datasets.append(ds); labels.append("hybrid_kan")
 
     # 4. Baseline KAN
-    ds, metrics = run_model_adam(lambda: pt.CoordKANModel(args=topo_args, grid=10), "baseline_kan", args.max_steps)
+    ds, metrics = run_model_adam(lambda: pt.BaseKANModel(args=topo_args, grid=10), "baseline_kan", args.max_steps)
     results.append(metrics); datasets.append(ds); labels.append("baseline_kan")
 
     # Save benchmark stats to JSON
@@ -99,6 +118,9 @@ def main():
     # Save physical designs to NetCDF
     dims = pd.Index(labels, name='model')
     xr.concat(datasets, dim=dims).to_netcdf(out_dir / f"{args.problem}_designs.nc")
+
+    # Save summary to Markdown
+    save_markdown_summary(args.problem, results, out_dir)
 
     # Print summary table
     print("\n" + "="*50)

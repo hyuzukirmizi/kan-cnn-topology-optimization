@@ -1,0 +1,53 @@
+{
+  "problem": "roof_256x256_0.4",
+  "results": [
+    {
+      "model": "Hybrid KAN",
+      "time_sec": 2756.6644694805145,
+      "best_loss": 2.8994688654493563,
+      "best_step": 400,
+      "final_loss": 2.8994688654493563,
+      "final_gray_fraction": 0.05560302734375
+    },
+    {
+      "model": "KAN",
+      "time_sec": 7369.60768032074,
+      "best_loss": 2.8645369104330727,
+      "best_step": 400,
+      "final_loss": 2.8645369104330727,
+      "final_gray_fraction": 0.07012939453125
+    },
+    {
+      "model": "CNN-LBFGS",
+      "time_sec": 2768.6754117012024,
+      "best_loss": 2.9233595994477413,
+      "best_step": 401,
+      "final_loss": 2.9233595994477413,
+      "final_gray_fraction": 0.0716552734375
+    },
+    {
+      "model": "Pixel-LBFGS",
+      "time_sec": 732.7512245178223,
+      "best_loss": 4.2155304607526665,
+      "best_step": 119,
+      "final_loss": 4.2155304607526665,
+      "final_gray_fraction": 0.100006103515625
+    },
+    {
+      "model": "MMA",
+      "time_sec": 2279.7904806137085,
+      "best_loss": 2.8512674664269415,
+      "best_step": 397,
+      "final_loss": 2.8512679012929203,
+      "final_gray_fraction": 0.0928955078125
+    },
+    {
+      "model": "OC",
+      "time_sec": 2363.6739642620087,
+      "best_loss": 2.9664789537888514,
+      "best_step": 400,
+      "final_loss": 2.9664789537888514,
+      "final_gray_fraction": 0.066741943359375
+    }
+  ]
+}
