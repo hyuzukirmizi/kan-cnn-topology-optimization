@@ -29,13 +29,14 @@ import scipy.ndimage
 import scipy.sparse
 import scipy.sparse.linalg
 try:
-  import sksparse.cholmod
+  import sksparse.cholmod as cholmod
   HAS_CHOLMOD = True
-except ImportError:
+  CHOLMOD_MODULE = cholmod
+except Exception as exc:
   warnings.warn(
-      'sksparse.cholmod not installed. Falling back to SciPy/SuperLU, but '
-      'simulations will be about twice as slow.')
+      f'sksparse.cholmod unavailable ({exc}). Falling back to SciPy/SuperLU.')
   HAS_CHOLMOD = False
+  CHOLMOD_MODULE = None
 
 
 # internal utilities
@@ -139,18 +140,56 @@ def scatter1d(nonzero_values, nonzero_indices, array_len):
   return u_values[index_map]
 
 
+def _iter_solver_candidates(obj):
+  if obj is None:
+    return
+  if isinstance(obj, tuple):
+    for item in obj:
+      yield from _iter_solver_candidates(item)
+    return
+
+  if callable(getattr(obj, 'solve_A', None)):
+    yield obj.solve_A
+  if callable(getattr(obj, 'solve', None)):
+    yield obj.solve
+
+
+def _try_cholmod_solver(a):
+  if not HAS_CHOLMOD or CHOLMOD_MODULE is None:
+    return None
+
+  try:
+    factor = CHOLMOD_MODULE.cholesky(a)
+  except Exception as exc:
+    warnings.warn(
+        f'scikit-sparse cholmod initialization failed ({exc}); falling back to SciPy/SuperLU.')
+    return None
+
+  try:
+    for candidate in _iter_solver_candidates(factor):
+      if callable(candidate):
+        return candidate
+  except Exception as exc:
+    warnings.warn(
+        f'scikit-sparse cholmod solver setup failed ({exc}); falling back to SciPy/SuperLU.')
+
+  return None
+
+
 @caching.ndarray_safe_lru_cache(1)
 def _get_solver(a_entries, a_indices, size, sym_pos):
   """Get a solver for applying the desired matrix factorization."""
   # A cache size of one is sufficient to avoid re-computing the factorization in
   # the backwawrds pass.
   a = scipy.sparse.coo_matrix((a_entries, a_indices), shape=(size,)*2).tocsc()
-  if sym_pos and HAS_CHOLMOD:
-    return sksparse.cholmod.cholesky(a).solve_A
-  else:
-    # could also use scikits.umfpack.splu
-    # should be about twice as slow as the cholesky
-    return scipy.sparse.linalg.splu(a).solve
+  if sym_pos:
+    solver = _try_cholmod_solver(a)
+    if solver is not None:
+      return solver
+
+  # could also use scikits.umfpack.splu
+  # should be about twice as slow as the cholesky
+  return scipy.sparse.linalg.splu(a).solve
 
 
 ## Sparse solver

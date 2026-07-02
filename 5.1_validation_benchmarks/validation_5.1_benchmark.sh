@@ -11,10 +11,16 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -n "$SLURM_SUBMIT_DIR" ]; then
-    REPO_ROOT="$SLURM_SUBMIT_DIR"
+    # When running via sbatch, SLURM_SUBMIT_DIR is the directory where the job was submitted.
+    # The user has indicated they run sbatch from the script's directory inside the repo.
+    # Therefore, the repo root is one level above SLURM_SUBMIT_DIR.
+    ROOT_DIR="$SLURM_SUBMIT_DIR"
+    REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
 else
+    # Fallback for local execution when not using Slurm.
+    # This determines the script's own directory and goes up one level.
+    ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
 fi
 export REPO_ROOT
@@ -125,7 +131,7 @@ def train_model(problem_name, problem):
     print(f"[{problem_name}] Using KAN layers: {kan_hidden_layers} for {total_elements} elements.")
 
     model_specs = [
-        ("KAN", lambda: pt.CoordKANModel(args=topo_args, kan_layers=kan_hidden_layers, grid=10, k=3), "lbfgs"),
+        ("KAN", lambda: pt.BaseKANModel(args=topo_args, kan_layers=kan_hidden_layers, grid=10, k=3), "lbfgs"),
         ("CNN-LBFGS", lambda: pt.CNNModel(args=topo_args, **kwargs), "lbfgs"),
         ("Pixel-LBFGS", lambda: pt.PixelModel(args=topo_args), "lbfgs"),
         ("MMA", lambda: pt.PixelModel(args=topo_args), "mma"),

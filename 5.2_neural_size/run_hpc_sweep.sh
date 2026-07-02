@@ -7,16 +7,38 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16G
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
+# To request a longer allocation, submit with, for example:
+# sbatch --time=72:00:00 run_hpc_sweep.sh
 
 set -euo pipefail
 
 # --- Environment Setup ---
 # Get the root directory of the repository
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
+if [ -n "$SLURM_SUBMIT_DIR" ]; then
+    # When running via sbatch, SLURM_SUBMIT_DIR is the directory where the job was submitted.
+    # The user has indicated they run sbatch from the script's directory inside the repo.
+    # Therefore, the repo root is one level above SLURM_SUBMIT_DIR.
+    ROOT_DIR="$SLURM_SUBMIT_DIR"
+    REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
+else
+    # Fallback for local execution when not using Slurm.
+    # This determines the script's own directory and goes up one level.
+    ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    REPO_ROOT="$(cd "$ROOT_DIR/.." && pwd)"
+fi
 export REPO_ROOT
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+
+# Keep the HPC checkout in sync with the latest repository state before running.
+if [ -d "$REPO_ROOT/.git" ]; then
+    echo "Syncing repository checkout from git..."
+    git -C "$REPO_ROOT" fetch --all --prune >/dev/null 2>&1 || true
+    branch="$(git -C "$REPO_ROOT" branch --show-current 2>/dev/null || true)"
+    if [ -n "$branch" ]; then
+        git -C "$REPO_ROOT" pull --ff-only origin "$branch" >/dev/null 2>&1 || echo "git pull skipped or failed; continuing with the existing checkout"
+    fi
+fi
 
 # Set a working directory; use SLURM's submit directory or a default
 WORK_ROOT="${SLURM_SUBMIT_DIR:-$ROOT_DIR}"
@@ -72,6 +94,28 @@ echo "Installing Python packages from requirements.txt..."
 python -m pip install --upgrade pip
 # Ensure requirements are installed from the repository root
 python -m pip install -r "${REPO_ROOT}/requirements.txt"
+# Install the sparse cholmod backend used by the topology solver when available.
+# On Unity HPC this is often better installed from conda rather than pip because it needs SuiteSparse headers.
+if conda install -y -n "$ENV_NAME" -c conda-forge scikit-sparse; then
+    echo "Installed scikit-sparse from conda-forge."
+else    
+    echo "conda install for scikit-sparse failed; continuing without it."
+fi
+
+# --- Sanity Check the Solver ---
+echo "Running a tiny sparse-solver smoke test..."
+python - <<'PY'
+import numpy as np
+import scipy.sparse
+from neural_structural_optimization import autograd_lib
+
+a = scipy.sparse.csc_matrix(np.array([[4.0, 1.0], [1.0, 3.0]]))
+entries = a.data
+indices = np.vstack([a.tocoo().row, a.tocoo().col])
+solver = autograd_lib._get_solver(entries, indices, 2, True)
+x = solver(np.array([1.0, 2.0]))
+print('solver_smoke_test_ok', x)
+PY
 
 # --- Run the Sweep ---
 echo "Executing the parameter sweep script..."

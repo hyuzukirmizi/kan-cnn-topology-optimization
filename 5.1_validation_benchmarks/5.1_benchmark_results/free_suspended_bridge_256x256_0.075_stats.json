@@ -1,0 +1,45 @@
+{
+  "problem": "free_suspended_bridge_256x256_0.075",
+  "results": [
+    {
+      "model": "KAN",
+      "time_sec": 7088.624132633209,
+      "best_loss": 32.228682668986075,
+      "best_step": 400,
+      "final_loss": 32.228682668986075,
+      "final_gray_fraction": 0.0432281494140625
+    },
+    {
+      "model": "CNN-LBFGS",
+      "time_sec": 2279.343479156494,
+      "best_loss": 58.08588374303061,
+      "best_step": 400,
+      "final_loss": 58.08588374303061,
+      "final_gray_fraction": 0.051116943359375
+    },
+    {
+      "model": "Pixel-LBFGS",
+      "time_sec": 444.30221796035767,
+      "best_loss": 78.87437813315466,
+      "best_step": 87,
+      "final_loss": 78.87437813315466,
+      "final_gray_fraction": 0.039337158203125
+    },
+    {
+      "model": "MMA",
+      "time_sec": 2073.4355742931366,
+      "best_loss": 32.2813680301326,
+      "best_step": 400,
+      "final_loss": 32.2813680301326,
+      "final_gray_fraction": 0.0548248291015625
+    },
+    {
+      "model": "OC",
+      "time_sec": 2102.3829884529114,
+      "best_loss": 36.90748491504719,
+      "best_step": 400,
+      "final_loss": 36.90748491504719,
+      "final_gray_fraction": 0.0482025146484375
+    }
+  ]
+}
