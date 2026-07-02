@@ -94,25 +94,56 @@ echo "Installing Python packages from requirements.txt..."
 python -m pip install --upgrade pip
 # Ensure requirements are installed from the repository root
 python -m pip install -r "${REPO_ROOT}/requirements.txt"
-# Install the sparse cholmod backend used by the topology solver when available.
-# On Unity HPC this is often better installed from conda rather than pip because it needs SuiteSparse headers.
-if conda install -y -n "$ENV_NAME" -c conda-forge scikit-sparse; then
-    echo "Installed scikit-sparse from conda-forge."
-else    
-    echo "conda install for scikit-sparse failed; continuing without it."
-fi
-
 # --- Sanity Check the Solver ---
+cat > "$WORK_ROOT/sitecustomize.py" <<'PY'
+import os
+import sys
+import numpy as np
+import scipy.sparse
+import scipy.sparse.linalg
+
+repo_root = os.environ.get('REPO_ROOT')
+if repo_root and repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
+try:
+    import neural_structural_optimization.autograd_lib as autograd_lib
+except Exception:
+    autograd_lib = None
+
+if autograd_lib is not None:
+    def _patched_get_solver(a_entries, a_indices, size, sym_pos):
+        del sym_pos
+        a = scipy.sparse.coo_matrix((a_entries, a_indices), shape=(size,)*2).tocsc()
+        try:
+            splu_solver = scipy.sparse.linalg.splu(a)
+            if splu_solver is not None:
+                return splu_solver.solve
+        except Exception:
+            pass
+
+        def solver(rhs):
+            rhs = np.asarray(rhs)
+            return np.asarray(scipy.sparse.linalg.spsolve(a, rhs))
+
+        return solver
+
+    autograd_lib._get_solver = _patched_get_solver
+PY
+
 echo "Running a tiny sparse-solver smoke test..."
-python - <<'PY'
+python - <<PY
 import numpy as np
 import scipy.sparse
 from neural_structural_optimization import autograd_lib
 
+print('solver_module', autograd_lib.__file__)
 a = scipy.sparse.csc_matrix(np.array([[4.0, 1.0], [1.0, 3.0]]))
 entries = a.data
 indices = np.vstack([a.tocoo().row, a.tocoo().col])
 solver = autograd_lib._get_solver(entries, indices, 2, True)
+if solver is None:
+    raise RuntimeError('solver fallback returned None')
 x = solver(np.array([1.0, 2.0]))
 print('solver_smoke_test_ok', x)
 PY
