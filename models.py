@@ -701,11 +701,15 @@ def _prepare_kan_plot(model):
 # L-BFGS via scipy  (mirrors train.train_lbfgs)
 # ---------------------------------------------------------------------------
 
-def train_lbfgs(model, max_iterations, save_intermediate_designs=True, **kwargs):
+def train_lbfgs(model, max_iterations, save_intermediate_designs=True, progress_every=None, **kwargs):
     """Train any Model subclass with L-BFGS via scipy.optimize.fmin_l_bfgs_b.
 
     Mirrors train.train_lbfgs from the neural-structural-optimization package.
     Works for PixelModel, CNNModel, and KANModel.
+
+    progress_every : int, optional
+        If set, print the current step and loss every this many function
+        evaluations.
     """
     losses = []
     frames = []
@@ -726,6 +730,8 @@ def train_lbfgs(model, max_iterations, save_intermediate_designs=True, **kwargs)
         ]).astype(np.float64)
         frames.append(logits.detach().cpu().numpy().copy())
         losses.append(float(loss.detach().cpu()))
+        if progress_every and len(losses) % progress_every == 0:
+            print(f"  step {len(losses)}/{max_iterations}: loss={losses[-1]:.4f}")
         return float(loss.detach().cpu()), grad
 
     x0 = _get_params_flat(model).astype(np.float64)
@@ -870,12 +876,16 @@ def train_lbfgs_adaptive_kan(model, grid_schedule, save_intermediate_designs=Tru
 # ---------------------------------------------------------------------------
 
 def method_of_moving_asymptotes(
-    model, max_iterations, save_intermediate_designs=True
+    model, max_iterations, save_intermediate_designs=True, progress_every=None
 ):
     """MMA optimiser (nlopt) for PixelModel only.
 
     Mirrors train.method_of_moving_asymptotes exactly; the underlying physics
     is unchanged and computed via autograd.numpy.
+
+    progress_every : int, optional
+        If set, print the current step and loss every this many objective
+        evaluations.
     """
     try:
         import nlopt
@@ -904,6 +914,8 @@ def method_of_moving_asymptotes(
                 value = func(x)
             if losses is not None:
                 losses.append(value)
+                if progress_every and len(losses) % progress_every == 0:
+                    print(f"  step {len(losses)}/{max_iterations}: loss={value:.4f}")
             if frames is not None:
                 frames.append(env.reshape(x).copy())
             return value
@@ -929,12 +941,15 @@ def method_of_moving_asymptotes(
 # ---------------------------------------------------------------------------
 
 def optimality_criteria(
-    model, max_iterations, save_intermediate_designs=True
+    model, max_iterations, save_intermediate_designs=True, progress_every=None
 ):
     """OC optimiser for PixelModel only.
 
     Mirrors train.optimality_criteria exactly; the underlying physics is
     unchanged and computed via autograd.numpy.
+
+    progress_every : int, optional
+        If set, print the current step and loss every this many steps.
     """
     if not isinstance(model, PixelModel):
         raise ValueError("Optimality criteria is only defined for PixelModel")
@@ -944,9 +959,11 @@ def optimality_criteria(
 
     losses = []
     frames = [x.copy()]
-    for _ in range(max_iterations):
+    for step in range(max_iterations):
         c, x = topo_physics.optimality_criteria_step(x, env.ke, env.args)
         losses.append(c)
+        if progress_every and (step + 1) % progress_every == 0:
+            print(f"  step {step + 1}/{max_iterations}: loss={c:.4f}")
         if np.isnan(c):
             break
         frames.append(x.copy())

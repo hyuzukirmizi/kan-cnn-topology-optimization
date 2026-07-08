@@ -1,17 +1,39 @@
 #!/bin/bash
 #SBATCH --job-name=kan_param_sweep
-#SBATCH --output=logs/param_sweep_%j.out
-#SBATCH --error=logs/param_sweep_%j.err
+#SBATCH --output=logs/param_sweep_%A_%a.out
+#SBATCH --error=logs/param_sweep_%A_%a.err
 #SBATCH --partition=cpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=6
 #SBATCH --mem=16G
+# The --array directive creates a job for each problem.
+# Manually set the end index to (number of problems - 1).
+# For the default 2 problems, this is --array=0-1
+# For 3 problems, it would be --array=0-2
+#SBATCH --array=0
 #SBATCH --time=48:00:00
-# To request a longer allocation, submit with, for example:
-# sbatch --time=72:00:00 run_hpc_sweep.sh
+# For longer allocations, submit with a different --time value or export
+# SWEEP_TIME_LIMIT before launch.
 
 set -euo pipefail
+
+# --- Single-location sweep configuration ---
+# Edit these values to change the sweep without touching the Python runner.
+export SWEEP_MAX_STEPS="${SWEEP_MAX_STEPS:-400}"
+# Default order runs the remaining problems first and skips the long MBB beam case.
+export SWEEP_PROBLEMS="${SWEEP_PROBLEMS:-free_suspended_bridge_256x256_0.075}"
+export SWEEP_TEST_TYPES="${SWEEP_TEST_TYPES:-hidden_layers grid k}"
+# SWEEP_WORKERS is now used as a fallback for local runs, HPC runs divide CPUs from Slurm.
+export SWEEP_WORKERS="${SWEEP_WORKERS:-4}"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
+
+PROBLEMS_ARRAY=($SWEEP_PROBLEMS)
+ARRAY_TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
+CURRENT_PROBLEM="${PROBLEMS_ARRAY[$ARRAY_TASK_ID]}"
 
 # --- Environment Setup ---
 # Get the root directory of the repository
@@ -47,6 +69,8 @@ if [[ ! -w "$WORK_ROOT" ]]; then
     WORK_ROOT="$HOME/kan_topo_sweep"
 fi
 
+export SWEEP_OUT_DIR="${SWEEP_OUT_DIR:-$WORK_ROOT/results}"
+
 # Unity HPC recommendation: Set conda cache and env directories to the /work partition
 export CONDA_PKGS_DIRS="${WORK_ROOT}/.conda/pkgs"
 export CONDA_ENVS_PATH="${WORK_ROOT}/.conda/envs"
@@ -59,6 +83,8 @@ cd "$WORK_ROOT"
 echo "========================================================"
 echo "Starting KAN Parameter Sweep on Unity HPC"
 echo "Job ID: ${SLURM_JOB_ID:-local}"
+echo "Array Task ID: ${ARRAY_TASK_ID}"
+echo "Problem: ${CURRENT_PROBLEM}"
 echo "Repository Root: ${REPO_ROOT}"
 echo "Working Directory: $(pwd)"
 echo "Start time: $(date)"
@@ -149,9 +175,41 @@ print('solver_smoke_test_ok', x)
 PY
 
 # --- Run the Sweep ---
-echo "Executing the parameter sweep script..."
-# Run the Python script from the 5.2_neural_size directory
-python "${REPO_ROOT}/5.2_neural_size/parameter_sweep.py"
+echo "Executing parameter sweep for problem: ${CURRENT_PROBLEM}"
+
+TEST_TYPE_ARRAY=($SWEEP_TEST_TYPES)
+NUM_TEST_TYPES=${#TEST_TYPE_ARRAY[@]}
+# Default to SWEEP_WORKERS if not running under Slurm, otherwise use allocated CPUs.
+CPUS_PER_TASK=${SLURM_CPUS_PER_TASK:-${SWEEP_WORKERS}}
+# To prevent OOM errors, test types are run sequentially.
+# The number of workers is controlled by SWEEP_WORKERS (defaults to 4).
+WORKERS_PER_RUN="1"
+
+echo "Max steps: ${SWEEP_MAX_STEPS}"
+echo "Total CPUs for task: $CPUS_PER_TASK"
+echo "Test types to run sequentially: ${SWEEP_TEST_TYPES}"
+echo "Workers per test run: $WORKERS_PER_RUN"
+
+for TEST_TYPE in "${TEST_TYPE_ARRAY[@]}"; do
+    echo "--------------------------------------------------------"
+    echo "Starting sweep for test type: ${TEST_TYPE}"
+
+    # Create a specific output directory for each run
+    SWEEP_OUT_DIR_RUN="${SWEEP_OUT_DIR}/${CURRENT_PROBLEM}/${TEST_TYPE}"
+    mkdir -p "$SWEEP_OUT_DIR_RUN"
+
+    python "${REPO_ROOT}/5.2_neural_size/parameter_sweep.py" \
+        --max-steps "${SWEEP_MAX_STEPS}" \
+        --problems "${CURRENT_PROBLEM}" \
+        --test-types "${TEST_TYPE}" \
+        --workers "${WORKERS_PER_RUN}" \
+        --out-dir "${SWEEP_OUT_DIR_RUN}" \
+        --resume
+done
+
+echo "--------------------------------------------------------"
+echo "All sweep runs for problem ${CURRENT_PROBLEM} have completed."
+
 
 echo "========================================================"
 echo "Job finished on: $(date)"
