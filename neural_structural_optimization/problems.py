@@ -443,12 +443,18 @@ PROBLEMS_BY_CATEGORY = {
         mbb_beam(384, 128, density=0.3),
         mbb_beam(192, 32, density=0.5),
         mbb_beam(384, 64, density=0.4),
+        # same-density exact 2x / 4x scalings (KAN reusability experiments)
+        mbb_beam(192, 64, density=0.5),
+        mbb_beam(384, 128, density=0.5),
     ],
     'cantilever_beam_full': [
         cantilever_beam_full(96, 32, density=0.4),
         cantilever_beam_full(192, 64, density=0.3),
         cantilever_beam_full(384, 128, density=0.2),
         cantilever_beam_full(384, 128, density=0.15),
+        # same-density exact 2x / 4x scalings (KAN reusability experiments)
+        cantilever_beam_full(192, 64, density=0.4),
+        cantilever_beam_full(384, 128, density=0.4),
     ],
     'cantilever_beam_two_point': [
         cantilever_beam_two_point(64, 48, density=0.4),

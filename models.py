@@ -12,6 +12,7 @@ optimality_criteria) mirror their counterparts in train.py.
 
 import os
 import sys
+import time
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -466,6 +467,57 @@ class EfficientKANLinear(nn.Module):
         base_out = F.linear(self.base_activation(x), self.base_weight)
         return base_out + spline_out
 
+    @torch.no_grad()
+    def refine(self, new_grid_size, x=None, n_samples=256):
+        """Return a copy of this layer with a finer B-spline grid.
+
+        The new spline coefficients are least-squares fitted so that every
+        edge's learned function is preserved on the given input samples --
+        the KAN analogue of h-refinement in adaptive FEM.  The base
+        (SiLU-path) weights are grid-independent and copied as-is.
+
+        Parameters
+        ----------
+        x : (N, in_features) tensor, optional
+            Actual inputs this layer sees (e.g. the previous layer's outputs
+            on the training coordinates).  The new knot range is recalibrated
+            to cover these samples and the fit is performed on them, which is
+            essential for hidden layers whose inputs are not confined to the
+            original grid_range.  If omitted, a synthetic linspace over the
+            current knot range is used.
+        """
+        k = self.spline_order
+        old_range = (self.grid[0, k].item(), self.grid[0, -(k + 1)].item())
+
+        if x is None:
+            xs = torch.linspace(old_range[0], old_range[1], n_samples)
+            x = xs.unsqueeze(1).expand(n_samples, self.in_features).contiguous()
+
+        # Recalibrate the knot range to the observed inputs (with a small
+        # margin: b_splines uses half-open intervals, so a sample exactly at
+        # the last knot would otherwise get zero bases).
+        span = float(x.max() - x.min()) or 1.0
+        new_range = (float(x.min()) - 1e-3 * span, float(x.max()) + 1e-3 * span)
+        new_layer = EfficientKANLinear(
+            self.in_features, self.out_features,
+            grid_size=new_grid_size, spline_order=k,
+            grid_range=new_range,
+            base_activation=type(self.base_activation),
+        )
+
+        # Fit per input feature (each feature has its own sample values):
+        # match the old spline response on the actual samples in the
+        # least-squares sense.  The base path is identical on both sides and
+        # needs no fitting.
+        bases_old = self.b_splines(x)       # (N, in, n_old_bases)
+        bases_new = new_layer.b_splines(x)  # (N, in, n_new_bases)
+        for i in range(self.in_features):
+            targets = bases_old[:, i, :] @ self.spline_weight[:, i, :].T  # (N, out)
+            solution = torch.linalg.lstsq(bases_new[:, i, :], targets).solution
+            new_layer.spline_weight[:, i, :] = solution.T
+        new_layer.base_weight.copy_(self.base_weight)
+        return new_layer
+
 
 class EfficientKAN(nn.Module):
     """Stack of KAN layers."""
@@ -480,6 +532,26 @@ class EfficientKAN(nn.Module):
         for layer in self.layers:
             x = layer(x)
         return x
+
+    @torch.no_grad()
+    def refine(self, new_grid_size, x=None):
+        """Return a new EfficientKAN with every layer's spline grid expanded
+        to ``new_grid_size``, preserving all learned edge functions.
+
+        If ``x`` (a batch of network inputs, e.g. the training coordinates)
+        is given, each layer is refined against the inputs it actually sees,
+        which recalibrates hidden-layer knot ranges to the true activation
+        distribution and makes the refit near-exact on that data.
+        """
+        new = EfficientKAN.__new__(EfficientKAN)
+        nn.Module.__init__(new)
+        new_layers = []
+        for layer in self.layers:
+            new_layers.append(layer.refine(new_grid_size, x))
+            if x is not None:
+                x = layer(x)   # inputs for the next layer
+        new.layers = nn.ModuleList(new_layers)
+        return new
 
 class BaseKANModel(Model):
     """Coordinate-based KAN: maps (x, y) → density ρ(x, y).
@@ -625,18 +697,7 @@ class BaseKANModel(Model):
         -------
         self  (for chaining)
         """
-        # pykan's refine() reads spline_preacts / spline_postsplines which are
-        # only populated when save_act=True and a forward pass has been run.
-        self.kan.save_act = True
-        with torch.no_grad():
-            self.kan(self.coords)                    # fills spline activation cache
-
-        # pykan.refine() writes to ckpt_path/history.txt — ensure directory exists.
-        import os
-        os.makedirs(self.kan.ckpt_path, exist_ok=True)
-
-        self.kan = self.kan.refine(new_grid)
-        self.kan.save_act = False
+        self.kan = self.kan.refine(new_grid, self.coords)
         return self
 
 
@@ -713,6 +774,8 @@ def train_lbfgs(model, max_iterations, save_intermediate_designs=True, progress_
     """
     losses = []
     frames = []
+    t_start = time.time()
+    t_last_print = [t_start]
 
     def value_and_grad(x):
         _set_params_flat(model, x)
@@ -731,7 +794,10 @@ def train_lbfgs(model, max_iterations, save_intermediate_designs=True, progress_
         frames.append(logits.detach().cpu().numpy().copy())
         losses.append(float(loss.detach().cpu()))
         if progress_every and len(losses) % progress_every == 0:
-            print(f"  step {len(losses)}/{max_iterations}: loss={losses[-1]:.4f}")
+            now = time.time()
+            print(f"  step {len(losses)}/{max_iterations}: loss={losses[-1]:.4f}"
+                  f"  [{now - t_start:.1f}s elapsed, +{now - t_last_print[0]:.1f}s this batch]")
+            t_last_print[0] = now
         return float(loss.detach().cpu()), grad
 
     x0 = _get_params_flat(model).astype(np.float64)
@@ -899,6 +965,8 @@ def method_of_moving_asymptotes(
 
     env = model.env
     x0 = _get_params_flat(model).astype(np.float64)
+    t_start = time.time()
+    t_last_print = [t_start]
 
     def _objective(x):
         return env.objective(x, volume_contraint=False)
@@ -915,7 +983,10 @@ def method_of_moving_asymptotes(
             if losses is not None:
                 losses.append(value)
                 if progress_every and len(losses) % progress_every == 0:
-                    print(f"  step {len(losses)}/{max_iterations}: loss={value:.4f}")
+                    now = time.time()
+                    print(f"  step {len(losses)}/{max_iterations}: loss={value:.4f}"
+                          f"  [{now - t_start:.1f}s elapsed, +{now - t_last_print[0]:.1f}s this batch]")
+                    t_last_print[0] = now
             if frames is not None:
                 frames.append(env.reshape(x).copy())
             return value
@@ -959,11 +1030,16 @@ def optimality_criteria(
 
     losses = []
     frames = [x.copy()]
+    t_start = time.time()
+    t_last_print = t_start
     for step in range(max_iterations):
         c, x = topo_physics.optimality_criteria_step(x, env.ke, env.args)
         losses.append(c)
         if progress_every and (step + 1) % progress_every == 0:
-            print(f"  step {step + 1}/{max_iterations}: loss={c:.4f}")
+            now = time.time()
+            print(f"  step {step + 1}/{max_iterations}: loss={c:.4f}"
+                  f"  [{now - t_start:.1f}s elapsed, +{now - t_last_print:.1f}s this batch]")
+            t_last_print = now
         if np.isnan(c):
             break
         frames.append(x.copy())
