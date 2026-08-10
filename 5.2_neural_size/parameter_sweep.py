@@ -41,6 +41,9 @@ except ImportError as exc:
 warnings.filterwarnings("ignore", category=UserWarning)
 
 DEFAULT_MAX_STEPS = 400
+# Density band around 0/1 that counts as "converged" solid/void; anything
+# strictly between GREY_THRESHOLD and 1 - GREY_THRESHOLD counts as grey.
+GREY_THRESHOLD = 0.05
 
 PROBLEM_SPECS = {
     "mbb_beam_384x128_0.3": problems.PROBLEMS_BY_NAME["mbb_beam_384x128_0.3"],
@@ -85,7 +88,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--out-dir",
         type=str,
-        default=str(REPO_ROOT / "5.2_neural_size" / "results"),
+        default=str(REPO_ROOT / "5.2_neural_size" / "neural_size_results"),
         help="Directory for plots, JSON checkpoints, and summaries",
     )
     parser.add_argument("--resume", dest="resume", action="store_true", default=True, help="Resume from completed run files")
@@ -163,11 +166,15 @@ def _run_single_test(problem_name: str, problem: Any, model_params: dict[str, An
         if design_values.size == 0 or not np.any(mask):
             volume_fraction = float("nan")
             volume_violation = float("nan")
+            grey_fraction = float("nan")
             design_stats = {}
         else:
             active_values = design_values[mask]
             volume_fraction = float(np.mean(active_values))
             volume_violation = float(volume_fraction - topo_args["volfrac"])
+            # Grey fraction: share of active elements that are neither ~0 nor ~1,
+            # i.e. not converged to a discrete solid/void state.
+            grey_fraction = float(np.mean((active_values > GREY_THRESHOLD) & (active_values < 1.0 - GREY_THRESHOLD)))
             design_stats = {
                 "shape": list(design_values.shape),
                 "min": float(np.min(design_values)),
@@ -190,6 +197,7 @@ def _run_single_test(problem_name: str, problem: Any, model_params: dict[str, An
                 "best_step": best_step,
                 "volume_fraction": volume_fraction,
                 "volume_violation": volume_violation,
+                "grey_fraction": grey_fraction,
                 "time_sec": elapsed_time,
                 "config": {
                     "kan_layers": list(model_params["kan_layers"]),
@@ -215,6 +223,7 @@ def _run_single_test(problem_name: str, problem: Any, model_params: dict[str, An
                 "best_step": -1,
                 "volume_fraction": float("nan"),
                 "volume_violation": float("nan"),
+                "grey_fraction": float("nan"),
                 "time_sec": time.perf_counter() - start_time,
                 "config": {
                     "kan_layers": list(model_params.get("kan_layers", [])),
@@ -259,13 +268,22 @@ def _load_completed_run_keys(run_dir: Path) -> set[str]:
     return {path.stem for path in run_dir.glob("*.json")}
 
 
-def _save_test_type_summary(problem_name: str, test_type: str, records: list[dict[str, Any]], summary_dir: Path, parameter_order: list[Any]) -> None:
+def _numeric_sort_key(value: Any) -> float:
+    serialised = _serialise_value(value)
+    if isinstance(serialised, list):
+        return float(sum(serialised))
+    return float(serialised)
+
+
+def _save_test_type_summary(problem_name: str, test_type: str, records: list[dict[str, Any]], summary_dir: Path) -> None:
     summary_dir.mkdir(parents=True, exist_ok=True)
     parameter_name = TEST_TYPE_CONFIGS[test_type]["parameter_name"]
     label = TEST_TYPE_CONFIGS[test_type]["label"]
 
-    serialised_order = [_serialise_value(item) for item in parameter_order]
-    ordered_records = sorted(records, key=lambda record: serialised_order.index(record["parameter_value"]))
+    # Sort ascending so the plot and results file always read low-to-high,
+    # left to right, regardless of the order values are listed in
+    # TEST_TYPE_CONFIGS.
+    ordered_records = sorted(records, key=lambda record: _numeric_sort_key(record["parameter_value"]))
     frame = pd.DataFrame(ordered_records)
 
     if not frame.empty:
@@ -387,7 +405,7 @@ def _run_test_type(problem_name: str, problem: Any, test_type: str, max_steps: i
 
                 _append_progress_line(progress_log, f"completed {parameter_name}={_serialise_value(parameter_value)}")
                 _write_progress_state(problem_name, test_type, records, len(parameter_values), state_dir)
-                _save_test_type_summary(problem_name, test_type, records, summary_dir, list(parameter_values))
+                _save_test_type_summary(problem_name, test_type, records, summary_dir)
                 _persist_global_summary(out_dir)
 
     return records

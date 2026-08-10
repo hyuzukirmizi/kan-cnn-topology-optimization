@@ -1,0 +1,14 @@
+{
+  "problem": "free_suspended_bridge_256x256_0.075",
+  "test_type": "grid",
+  "total_configurations": 4,
+  "completed_configurations": 4,
+  "pending_configurations": 0,
+  "completed_parameters": [
+    10,
+    8,
+    6,
+    4
+  ],
+  "updated_at": "2026-07-08T10:44:58Z"
+}

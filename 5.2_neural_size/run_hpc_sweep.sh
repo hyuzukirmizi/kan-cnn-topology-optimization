@@ -5,13 +5,15 @@
 #SBATCH --partition=cpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=6
+#SBATCH --cpus-per-task=1
 #SBATCH --mem=16G
-# The --array directive creates a job for each problem.
-# Manually set the end index to (number of problems - 1).
-# For the default 2 problems, this is --array=0-1
-# For 3 problems, it would be --array=0-2
-#SBATCH --array=0
+# The --array directive creates one job per hyperparameter (SWEEP_TEST_TYPES
+# below). Default is "hidden_layers grid k" -> three jobs: array task 0 runs
+# the hidden_layers sweep, task 1 runs the grid sweep, task 2 runs the k
+# (spline order) sweep. Each job runs all SWEEP_PROBLEMS sequentially,
+# single-threaded (no multiprocessing). If you change the number of entries
+# in SWEEP_TEST_TYPES, update this range to match (0-(N-1)).
+#SBATCH --array=0-2
 #SBATCH --time=48:00:00
 # For longer allocations, submit with a different --time value or export
 # SWEEP_TIME_LIMIT before launch.
@@ -21,19 +23,22 @@ set -euo pipefail
 # --- Single-location sweep configuration ---
 # Edit these values to change the sweep without touching the Python runner.
 export SWEEP_MAX_STEPS="${SWEEP_MAX_STEPS:-400}"
-# Default order runs the remaining problems first and skips the long MBB beam case.
-export SWEEP_PROBLEMS="${SWEEP_PROBLEMS:-free_suspended_bridge_256x256_0.075}"
+# The four 5.1 validation benchmark problems, run sequentially within each job.
+export SWEEP_PROBLEMS="${SWEEP_PROBLEMS:-mbb_beam_384x128_0.3 cantilever_beam_two_point_256x192_0.15 roof_256x256_0.4 free_suspended_bridge_256x256_0.075}"
+# One SLURM array task per hyperparameter: task 0 = hidden_layers, task 1 =
+# grid, task 2 = k. Update #SBATCH --array above if you add/remove entries.
 export SWEEP_TEST_TYPES="${SWEEP_TEST_TYPES:-hidden_layers grid k}"
-# SWEEP_WORKERS is now used as a fallback for local runs, HPC runs divide CPUs from Slurm.
-export SWEEP_WORKERS="${SWEEP_WORKERS:-4}"
+# Runs are single-threaded (no multiprocessing) by design; kept at 1 worker.
+export SWEEP_WORKERS="${SWEEP_WORKERS:-1}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
 export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
 export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
 
+TEST_TYPE_ARRAY=($SWEEP_TEST_TYPES)
 PROBLEMS_ARRAY=($SWEEP_PROBLEMS)
 ARRAY_TASK_ID="${SLURM_ARRAY_TASK_ID:-0}"
-CURRENT_PROBLEM="${PROBLEMS_ARRAY[$ARRAY_TASK_ID]}"
+CURRENT_TEST_TYPE="${TEST_TYPE_ARRAY[$ARRAY_TASK_ID]}"
 
 # --- Environment Setup ---
 # Get the root directory of the repository
@@ -69,7 +74,7 @@ if [[ ! -w "$WORK_ROOT" ]]; then
     WORK_ROOT="$HOME/kan_topo_sweep"
 fi
 
-export SWEEP_OUT_DIR="${SWEEP_OUT_DIR:-$WORK_ROOT/results}"
+export SWEEP_OUT_DIR="${SWEEP_OUT_DIR:-$WORK_ROOT/neural_size_results}"
 
 # Unity HPC recommendation: Set conda cache and env directories to the /work partition
 export CONDA_PKGS_DIRS="${WORK_ROOT}/.conda/pkgs"
@@ -84,7 +89,8 @@ echo "========================================================"
 echo "Starting KAN Parameter Sweep on Unity HPC"
 echo "Job ID: ${SLURM_JOB_ID:-local}"
 echo "Array Task ID: ${ARRAY_TASK_ID}"
-echo "Problem: ${CURRENT_PROBLEM}"
+echo "Test type: ${CURRENT_TEST_TYPE}"
+echo "Problems: ${SWEEP_PROBLEMS}"
 echo "Repository Root: ${REPO_ROOT}"
 echo "Working Directory: $(pwd)"
 echo "Start time: $(date)"
@@ -175,40 +181,35 @@ print('solver_smoke_test_ok', x)
 PY
 
 # --- Run the Sweep ---
-echo "Executing parameter sweep for problem: ${CURRENT_PROBLEM}"
+echo "Executing ${CURRENT_TEST_TYPE} sweep across all problems"
 
-TEST_TYPE_ARRAY=($SWEEP_TEST_TYPES)
-NUM_TEST_TYPES=${#TEST_TYPE_ARRAY[@]}
-# Default to SWEEP_WORKERS if not running under Slurm, otherwise use allocated CPUs.
-CPUS_PER_TASK=${SLURM_CPUS_PER_TASK:-${SWEEP_WORKERS}}
-# To prevent OOM errors, test types are run sequentially.
-# The number of workers is controlled by SWEEP_WORKERS (defaults to 4).
+# Single-threaded by design: one worker, no multiprocessing.
 WORKERS_PER_RUN="1"
 
 echo "Max steps: ${SWEEP_MAX_STEPS}"
-echo "Total CPUs for task: $CPUS_PER_TASK"
-echo "Test types to run sequentially: ${SWEEP_TEST_TYPES}"
-echo "Workers per test run: $WORKERS_PER_RUN"
+echo "Test type for this job (array task ${ARRAY_TASK_ID}): ${CURRENT_TEST_TYPE}"
+echo "Problems to run sequentially: ${SWEEP_PROBLEMS}"
+echo "Workers per run: $WORKERS_PER_RUN"
 
-for TEST_TYPE in "${TEST_TYPE_ARRAY[@]}"; do
+for CURRENT_PROBLEM in "${PROBLEMS_ARRAY[@]}"; do
     echo "--------------------------------------------------------"
-    echo "Starting sweep for test type: ${TEST_TYPE}"
+    echo "Starting ${CURRENT_TEST_TYPE} sweep for problem: ${CURRENT_PROBLEM}"
 
     # Create a specific output directory for each run
-    SWEEP_OUT_DIR_RUN="${SWEEP_OUT_DIR}/${CURRENT_PROBLEM}/${TEST_TYPE}"
+    SWEEP_OUT_DIR_RUN="${SWEEP_OUT_DIR}/${CURRENT_PROBLEM}/${CURRENT_TEST_TYPE}"
     mkdir -p "$SWEEP_OUT_DIR_RUN"
 
     python "${REPO_ROOT}/5.2_neural_size/parameter_sweep.py" \
         --max-steps "${SWEEP_MAX_STEPS}" \
         --problems "${CURRENT_PROBLEM}" \
-        --test-types "${TEST_TYPE}" \
+        --test-types "${CURRENT_TEST_TYPE}" \
         --workers "${WORKERS_PER_RUN}" \
         --out-dir "${SWEEP_OUT_DIR_RUN}" \
         --resume
 done
 
 echo "--------------------------------------------------------"
-echo "All sweep runs for problem ${CURRENT_PROBLEM} have completed."
+echo "All ${CURRENT_TEST_TYPE} sweep runs across problems have completed."
 
 
 echo "========================================================"

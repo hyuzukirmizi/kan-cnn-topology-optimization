@@ -1,0 +1,14 @@
+{
+  "problem": "mbb_beam_384x128_0.3",
+  "test_type": "grid",
+  "total_configurations": 4,
+  "completed_configurations": 4,
+  "pending_configurations": 0,
+  "completed_parameters": [
+    10,
+    8,
+    6,
+    4
+  ],
+  "updated_at": "2026-07-07T14:53:21Z"
+}

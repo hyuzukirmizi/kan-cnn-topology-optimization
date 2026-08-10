@@ -1,0 +1,50 @@
+{
+  "problem": "cantilever_beam_two_point_256x192_0.15",
+  "test_type": "hidden_layers",
+  "parameter_name": "hidden_layers",
+  "parameter_value": [
+    16,
+    16
+  ],
+  "best_compliance": 209.50958723420078,
+  "final_compliance": 209.50958723420078,
+  "best_step": 400,
+  "volume_fraction": 0.15000786468057495,
+  "volume_violation": 7.86468057495382e-06,
+  "time_sec": 1528.2170091790613,
+  "config": {
+    "kan_layers": [
+      16,
+      16
+    ],
+    "grid": 10,
+    "k": 3,
+    "max_steps": 400
+  },
+  "design_stats": {
+    "shape": [
+      192,
+      256
+    ],
+    "min": 4.106258304214555e-17,
+    "max": 0.9999999998585012,
+    "mean": 0.15000786468057495,
+    "std": 0.3381888581136846,
+    "active_mean": 0.15000786468057495,
+    "active_count": 49152
+  },
+  "error": null,
+  "artifacts": {
+    "design_npy": "/home/hyuzukirmizi_umass_edu/kan-cnn-topology-optimization/5.2_neural_size/results/cantilever_beam_two_point_256x192_0.15/hidden_layers/cantilever_beam_two_point_256x192_0.15/hidden_layers/topologies/cantilever_beam_two_point_256x192_0.15_hidden_layers_16x16_design.npy",
+    "topology_png": "/home/hyuzukirmizi_umass_edu/kan-cnn-topology-optimization/5.2_neural_size/results/cantilever_beam_two_point_256x192_0.15/hidden_layers/cantilever_beam_two_point_256x192_0.15/hidden_layers/topologies/cantilever_beam_two_point_256x192_0.15_hidden_layers_16x16_topology.png"
+  },
+  "checkpoint": {
+    "problem": "cantilever_beam_two_point_256x192_0.15",
+    "test_type": "hidden_layers",
+    "parameter_value": [
+      16,
+      16
+    ],
+    "completed_at": "2026-07-07T22:40:26Z"
+  }
+}

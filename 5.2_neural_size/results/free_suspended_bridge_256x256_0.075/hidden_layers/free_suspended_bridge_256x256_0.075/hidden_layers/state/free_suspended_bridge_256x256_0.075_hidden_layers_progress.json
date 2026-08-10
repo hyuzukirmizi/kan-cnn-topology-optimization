@@ -1,0 +1,26 @@
+{
+  "problem": "free_suspended_bridge_256x256_0.075",
+  "test_type": "hidden_layers",
+  "total_configurations": 4,
+  "completed_configurations": 4,
+  "pending_configurations": 0,
+  "completed_parameters": [
+    [
+      64,
+      64
+    ],
+    [
+      32,
+      32
+    ],
+    [
+      16,
+      16
+    ],
+    [
+      8,
+      8
+    ]
+  ],
+  "updated_at": "2026-07-08T03:19:36Z"
+}

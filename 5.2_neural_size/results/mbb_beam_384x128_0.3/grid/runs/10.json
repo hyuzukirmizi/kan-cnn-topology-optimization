@@ -1,0 +1,44 @@
+{
+  "problem": "mbb_beam_384x128_0.3",
+  "test_type": "grid",
+  "parameter_name": "grid",
+  "parameter_value": 10,
+  "best_compliance": 301.82668223933405,
+  "final_compliance": 301.82668223933405,
+  "best_step": 400,
+  "volume_fraction": 0.3000109446766123,
+  "volume_violation": 1.0944676612334447e-05,
+  "time_sec": 7263.2561705170665,
+  "config": {
+    "kan_layers": [
+      64,
+      64
+    ],
+    "grid": 10,
+    "k": 3,
+    "max_steps": 400
+  },
+  "design_stats": {
+    "shape": [
+      128,
+      384
+    ],
+    "min": 0.0,
+    "max": 1.0,
+    "mean": 0.3000109446766123,
+    "std": 0.44536645190699276,
+    "active_mean": 0.3000109446766123,
+    "active_count": 49152
+  },
+  "error": null,
+  "artifacts": {
+    "design_npy": "/home/hyuzukirmizi_umass_edu/kan-cnn-topology-optimization/5.2_neural_size/results/mbb_beam_384x128_0.3/grid/topologies/mbb_beam_384x128_0.3_grid_10_design.npy",
+    "topology_png": "/home/hyuzukirmizi_umass_edu/kan-cnn-topology-optimization/5.2_neural_size/results/mbb_beam_384x128_0.3/grid/topologies/mbb_beam_384x128_0.3_grid_10_topology.png"
+  },
+  "checkpoint": {
+    "problem": "mbb_beam_384x128_0.3",
+    "test_type": "grid",
+    "parameter_value": 10,
+    "completed_at": "2026-07-07T10:16:07Z"
+  }
+}

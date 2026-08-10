@@ -1,0 +1,11 @@
+{
+  "problem": "mbb_beam_384x128_0.3",
+  "test_type": "k",
+  "total_configurations": 4,
+  "completed_configurations": 1,
+  "pending_configurations": 3,
+  "completed_parameters": [
+    4
+  ],
+  "updated_at": "2026-07-07T16:52:07Z"
+}

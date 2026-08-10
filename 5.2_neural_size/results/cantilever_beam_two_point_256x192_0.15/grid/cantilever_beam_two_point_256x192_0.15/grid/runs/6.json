@@ -1,0 +1,44 @@
+{
+  "problem": "cantilever_beam_two_point_256x192_0.15",
+  "test_type": "grid",
+  "parameter_name": "grid",
+  "parameter_value": 6,
+  "best_compliance": 222.93019216407836,
+  "final_compliance": 222.93019216407836,
+  "best_step": 400,
+  "volume_fraction": 0.15000991648216913,
+  "volume_violation": 9.916482169136653e-06,
+  "time_sec": 4269.9098517159,
+  "config": {
+    "kan_layers": [
+      64,
+      64
+    ],
+    "grid": 6,
+    "k": 3,
+    "max_steps": 400
+  },
+  "design_stats": {
+    "shape": [
+      192,
+      256
+    ],
+    "min": 0.0,
+    "max": 1.0,
+    "mean": 0.15000991648216913,
+    "std": 0.33975047715520706,
+    "active_mean": 0.15000991648216913,
+    "active_count": 49152
+  },
+  "error": null,
+  "artifacts": {
+    "design_npy": "/home/hyuzukirmizi_umass_edu/kan-cnn-topology-optimization/5.2_neural_size/results/cantilever_beam_two_point_256x192_0.15/grid/cantilever_beam_two_point_256x192_0.15/grid/topologies/cantilever_beam_two_point_256x192_0.15_grid_6_design.npy",
+    "topology_png": "/home/hyuzukirmizi_umass_edu/kan-cnn-topology-optimization/5.2_neural_size/results/cantilever_beam_two_point_256x192_0.15/grid/cantilever_beam_two_point_256x192_0.15/grid/topologies/cantilever_beam_two_point_256x192_0.15_grid_6_topology.png"
+  },
+  "checkpoint": {
+    "problem": "cantilever_beam_two_point_256x192_0.15",
+    "test_type": "grid",
+    "parameter_value": 6,
+    "completed_at": "2026-07-07T23:56:02Z"
+  }
+}

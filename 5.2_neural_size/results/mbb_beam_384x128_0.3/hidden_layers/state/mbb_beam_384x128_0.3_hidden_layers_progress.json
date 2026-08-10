@@ -1,0 +1,26 @@
+{
+  "problem": "mbb_beam_384x128_0.3",
+  "test_type": "hidden_layers",
+  "total_configurations": 4,
+  "completed_configurations": 4,
+  "pending_configurations": 0,
+  "completed_parameters": [
+    [
+      64,
+      64
+    ],
+    [
+      32,
+      32
+    ],
+    [
+      16,
+      16
+    ],
+    [
+      8,
+      8
+    ]
+  ],
+  "updated_at": "2026-07-07T08:15:01Z"
+}

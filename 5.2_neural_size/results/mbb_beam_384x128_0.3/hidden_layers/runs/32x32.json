@@ -1,0 +1,50 @@
+{
+  "problem": "mbb_beam_384x128_0.3",
+  "test_type": "hidden_layers",
+  "parameter_name": "hidden_layers",
+  "parameter_value": [
+    32,
+    32
+  ],
+  "best_compliance": 302.1420406148124,
+  "final_compliance": 302.1420406148124,
+  "best_step": 400,
+  "volume_fraction": 0.3000087750379657,
+  "volume_violation": 8.775037965702559e-06,
+  "time_sec": 4204.100609502988,
+  "config": {
+    "kan_layers": [
+      32,
+      32
+    ],
+    "grid": 10,
+    "k": 3,
+    "max_steps": 400
+  },
+  "design_stats": {
+    "shape": [
+      128,
+      384
+    ],
+    "min": 0.0,
+    "max": 1.0,
+    "mean": 0.3000087750379657,
+    "std": 0.44554373581539525,
+    "active_mean": 0.3000087750379657,
+    "active_count": 49152
+  },
+  "error": null,
+  "artifacts": {
+    "design_npy": "/home/hyuzukirmizi_umass_edu/kan-cnn-topology-optimization/5.2_neural_size/results/mbb_beam_384x128_0.3/hidden_layers/topologies/mbb_beam_384x128_0.3_hidden_layers_32x32_design.npy",
+    "topology_png": "/home/hyuzukirmizi_umass_edu/kan-cnn-topology-optimization/5.2_neural_size/results/mbb_beam_384x128_0.3/hidden_layers/topologies/mbb_beam_384x128_0.3_hidden_layers_32x32_topology.png"
+  },
+  "checkpoint": {
+    "problem": "mbb_beam_384x128_0.3",
+    "test_type": "hidden_layers",
+    "parameter_value": [
+      32,
+      32
+    ],
+    "completed_at": "2026-07-07T07:00:44Z"
+  }
+}
